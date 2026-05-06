@@ -1,0 +1,116 @@
+CPQ Quote Intelligence Agent
+A Chrome extension that analyzes Salesforce CPQ quotes in real time using Claude AI. When a sales rep is on a CPQ Quote record, they click the extension icon and get a sidebar showing configuration flags, a discount recommendation, and a copyable approval justification — without leaving the page and without any changes to the Salesforce org.
+
+________________________________________
+Architecture
+Chrome Extension (content.js + background.js)
+        ↓
+Salesforce REST API (as the logged-in rep)
+        ↓
+Node.js Backend (Express)
+        ↓
+Anthropic Claude API
+The extension reads the quote directly using the rep's active session. The backend holds the Anthropic API key — it is never exposed to the browser.
+
+________________________________________
+What It Does
+•	Configuration Flags — reviews quote lines against active product rules, checks for missing bundle components, quantity anomalies, expired dates, and discount policy violations
+•	Discount Recommendation — suggests a recommended discount with floor and ceiling, based on quote total, account industry, and existing discount schedules
+•	Approval Justification — generates a ready-to-copy approval note structured for deal desk review
+
+________________________________________
+Project Structure
+cpq-agent/
+├── extension/
+│   ├── manifest.json       ← Chrome extension config
+│   ├── background.js       ← handles icon click, retrieves session token
+│   ├── content.js          ← injected into Salesforce, calls API + renders sidebar
+│   └── styles.css          ← sidebar styling
+│
+└── backend/
+    ├── index.js            ← Express server, single POST /analyze endpoint
+    ├── prompts.js          ← three Claude prompt templates
+    ├── package.json
+    └── .env                ← secrets, never committed
+
+________________________________________
+Prerequisites
+•	Node.js v18 or higher
+•	A Salesforce org with CPQ (Steelbrick) installed
+•	An Anthropic API account with credits
+•	Google Chrome
+
+________________________________________
+Local Setup
+1. Clone the repository
+git clone https://github.com/yourusername/cpq-agent-backend.git
+cd cpq-agent-backend
+2. Install dependencies
+npm install
+3. Create the environment file
+Create a .env file in the backend folder:
+ANTHROPIC_API_KEY=sk-ant-your-key-here
+PORT=3000
+ALLOWED_ORIGIN=chrome-extension://your-extension-id-here
+You will get the extension ID in step 5. Leave it as a placeholder for now.
+
+4. Start the backend
+node index.js
+You should see:
+Backend running on port 3000
+
+5. Load the Chrome extension
+•	Open Chrome and go to chrome://extensions
+•	Enable Developer mode (top right toggle)
+•	Click Load unpacked
+•	Select the /extension folder
+•	Copy the extension ID shown on the card
+•	
+Update ALLOWED_ORIGIN in your .env with the real extension ID:
+ALLOWED_ORIGIN=chrome-extension://abcdefghijklmnopqrstuvwxyz123456
+Restart the backend after updating.
+
+6. Test it
+•	Navigate to a CPQ Quote record in Salesforce
+•	Click the CPQ Agent icon in Chrome toolbar
+•	The sidebar appears within a few seconds
+
+________________________________________
+Deployment (Railway)
+The backend can be deployed to Railway for 24/7 availability without running it on your local machine.
+1.	Push the backend code to a private GitHub repository
+2.	Connect the repository to railway.app
+3.	Add environment variables in Railway's Variables tab: 
+o	ANTHROPIC_API_KEY
+o	PORT = 3000
+o	ALLOWED_ORIGIN = your extension's chrome-extension:// origin
+4.	Generate a domain in Railway's Settings tab
+5.	Update the analyze() function in extension/content.js to point to your Railway URL instead of localhost:3000
+6.	Reload the extension in Chrome
+Any future changes to the backend are deployed automatically on git push.
+
+________________________________________
+Security Notes
+•	The Anthropic API key never leaves the backend server
+•	The backend uses CORS to reject requests from any origin other than your Chrome extension and Salesforce domains
+•	The rep's Salesforce session token is used only to query the REST API and is never forwarded to the backend or stored anywhere
+•	The .env file is excluded from version control via .gitignore
+•	Rotate your API key immediately if it is ever committed to Git accidentally
+
+________________________________________
+Supported Salesforce URL Formats
+The extension activates on the following domains:
+•	*.salesforce.com
+•	*.force.com
+•	*.lightning.force.com
+•	*.trailblaze.lightning.force.com
+•	*.my.salesforce.com
+•	*.trailblaze.my.salesforce.com
+
+________________________________________
+Known Limitations
+•	Works only on individual Quote record pages, not list views
+•	Requires the rep to be actively logged into Salesforce in Chrome
+•	Product Rules and Discount Schedules are fetched with a limit of 50 records each, large orgs with extensive CPQ configuration may need this increased
+•	Each analysis consumes approximately 3 Anthropic API calls
+
